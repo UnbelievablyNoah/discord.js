@@ -18,6 +18,7 @@ import {
 	type GatewayIdentifyData,
 	type GatewayReceivePayload,
 	type GatewaySendPayload,
+	type GatewayReadyDispatchData,
 } from 'discord-api-types/v10';
 import { WebSocket, type RawData } from 'ws';
 import type { Inflate } from 'zlib-sync';
@@ -52,7 +53,7 @@ export enum WebSocketShardDestroyRecovery {
 export type WebSocketShardEventsMap = {
 	[WebSocketShardEvents.Debug]: [payload: { message: string }];
 	[WebSocketShardEvents.Hello]: [];
-	[WebSocketShardEvents.Ready]: [];
+	[WebSocketShardEvents.Ready]: [payload: { data: GatewayReadyDispatchData }];
 	[WebSocketShardEvents.Resumed]: [];
 	[WebSocketShardEvents.Dispatch]: [payload: { data: GatewayDispatchPayload }];
 };
@@ -382,10 +383,6 @@ export class WebSocketShard extends AsyncEventEmitter<WebSocketShardEventsMap> {
 
 		switch (payload.op) {
 			case GatewayOpcodes.Dispatch: {
-				if (this.status === WebSocketShardStatus.Ready || this.status === WebSocketShardStatus.Resuming) {
-					this.emit(WebSocketShardEvents.Dispatch, { data: payload });
-				}
-
 				if (this.status === WebSocketShardStatus.Resuming) {
 					this.replayedEvents++;
 				}
@@ -393,7 +390,7 @@ export class WebSocketShard extends AsyncEventEmitter<WebSocketShardEventsMap> {
 				// eslint-disable-next-line sonarjs/no-nested-switch
 				switch (payload.t) {
 					case GatewayDispatchEvents.Ready: {
-						this.emit(WebSocketShardEvents.Ready);
+						this.emit(WebSocketShardEvents.Ready, { data: payload.d });
 
 						this.session ??= {
 							sequence: payload.s,
@@ -423,6 +420,8 @@ export class WebSocketShard extends AsyncEventEmitter<WebSocketShardEventsMap> {
 					this.session.sequence = payload.s;
 					await this.strategy.updateSessionInfo(this.id, this.session);
 				}
+
+				this.emit(WebSocketShardEvents.Dispatch, { data: payload });
 
 				break;
 			}
